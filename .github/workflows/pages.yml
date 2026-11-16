@@ -1,8 +1,12 @@
 name: Build and publish Pages
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Preview validation"]
+    types: [completed]
+    branches: [develop]
 permissions:
   contents: read
   pages: write
@@ -12,15 +16,30 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
       - uses: actions/configure-pages@v5
       - run: python3 scripts/build_pages.py
-      - uses: actions/upload-pages-artifact@v3
+      - name: Check generated pages
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path("dist/test/index.html").read_text()
+          assert "family-finance-preview" in s and "family-v4" not in s
+          assert "실제 가계 데이터, 개인정보" in s
+          script = re.search(r"<script>(.*?)</script>", s, re.S)
+          assert script, "No script found"
+          Path("/tmp/fam-fin-test.js").write_text(script.group(1))
+          assert "준비 중" in Path("dist/index.html").read_text()
+          PY
+          node --check /tmp/fam-fin-test.js
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: dist
   deploy:
