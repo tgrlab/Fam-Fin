@@ -1,0 +1,24 @@
+name: Preview validation
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate app JavaScript
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path("app/index.html").read_text()
+          script = re.search(r"<script>(.*?)</script>", s, re.S)
+          assert script, "No script found"
+          Path("/tmp/fam-fin-preview.js").write_text(script.group(1))
+          PY
+          node --check /tmp/fam-fin-preview.js
